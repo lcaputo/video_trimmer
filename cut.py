@@ -1,13 +1,16 @@
 import os
+import pdb
+import datetime
 import subprocess
-from moviepy.video.io.ffmpeg_tools import ffmpeg_extract_subclip
-from moviepy.video.io.VideoFileClip import VideoFileClip
 import tkinter as tk
+from tkinter import END
+from pathlib import Path
 from tkinter import filedialog
 from tkinter import messagebox
-from tkinter import END
-import pdb
 from tkinter import PhotoImage
+from moviepy.video.io.VideoFileClip import VideoFileClip
+from moviepy.video.io.ffmpeg_tools import ffmpeg_extract_subclip
+
 
 # Variables
 video_title: str = ''
@@ -21,7 +24,13 @@ video_extract_end: list = []
 # Inicair Tkinter
 first_window = tk.Tk()
 
+
+def exit_event():
+    os.sys.exit()
+
+
 first_window.resizable(False, False)
+first_window.protocol("WM_DELETE_WINDOW", exit_event)
 first_window.title("Recorta tus videos")
 first_window.geometry("300x230")
 
@@ -34,7 +43,7 @@ def UploadAction(event=None):
     video_path = filename
     video_clip_file = VideoFileClip(video_path)
     # ASIGNAR VARIABLE CON DURACION DEL VIDEO
-    video_length = round(video_clip_file.duration, 2)
+    video_length = video_clip_file.duration
     print('Selected:', video_path)
     # ASIGNAR VARIABLE NUMERO DE CORTES
     try:
@@ -45,6 +54,7 @@ def UploadAction(event=None):
             # NUEVA VENTANA
             second_window = tk.Tk()
             second_window.resizable(False, False)
+            second_window.protocol("WM_DELETE_WINDOW", exit_event)
             video_title = video_path.split('/')[-1:][0]
             second_window.title(video_title)
 
@@ -53,13 +63,10 @@ def UploadAction(event=None):
                                     command=lambda: os.sys.exit())
             exit_button.grid(row=1, column=0)
 
-            # VENTANA CONVERTIR MINUTOS A SEGUNDOS
-            open_calc_button = tk.Button(
-                second_window, text="Calcular Miutos", command=lambda: CalcWindow())
-            open_calc_button.grid(row=1, column=1, pady=10)
             sections_label = tk.Label(
-                second_window, text="Duracion: " + str(video_length))
-            sections_label.grid(row=1, column=2)
+                second_window, text="Duración: " + str(datetime.timedelta(seconds=round(video_length))))
+            sections_label.grid(row=1, column=1)
+
             start_label = tk.Label(second_window, text="Inicio")
             start_label.grid(row=2, column=1)
             end_label = tk.Label(second_window, text="Fin")
@@ -86,22 +93,44 @@ def UploadAction(event=None):
             title="Error", message="Solo puede introducir números")
 
 
+def time_to_secs(time_input: str):
+    time: str = time_input.split(':') if time_input.split(':') else ''
+    hours_and_minutes: list = time[:-1]
+    seconds: int = int(time[-1:][0])
+    result: int = seconds
+    if len(hours_and_minutes) == 1:
+        result = result + int(hours_and_minutes[0])*60
+    if len(hours_and_minutes) == 2:
+        result += hours_and_minutes[0]*60
+        result += (hours_and_minutes[1]*60)*60
+    return result
+
+
 def cut_video(video_clip_file, num_of_cuts, video_length):
-    print(num_of_cuts, 'str ', int(num_of_cuts), 'int ')
     try:
         for i in range(0, int(num_of_cuts)):
-            start = int(video_extract_start[i].get())
-            end = int(video_extract_end[i].get())
+            start = time_to_secs(video_extract_start[i].get())
+            end = time_to_secs(video_extract_end[i].get())
+            time = '%s: %s' % (str(start), str(end))
             if end <= video_length:
                 output = video_clip_file.subclip(start, end)
-                output.write_videofile("exports/%s.mp4" % i)
+                output = output.set_duration(end-start)
+                directory = 'exports'
+                if not os.path.exists(directory):
+                    os.makedirs(directory)
+                output.write_videofile("%s/%s.mp4" % (directory, i+1))
+                messagebox.showinfo(
+                    title="Exito", message="Se exporto correctamente")
+                os.startfile(os.getcwd()+'/exports')
                 """ ffmpeg_extract_subclip(
                     video_clip_file, start, end, targetname="exports/%s.mp4" % i) """
             else:
                 print('max length exceeded')
                 messagebox.showwarning(
                     title="Advertencia", message="Los valores no puedes sobre pasar la duración maxima del video")
-        messagebox.showinfo(title="Exito", message="Se exporto correctamente")
+        video_clip_file.close()
+        if video_clip_file.audio and video_clip_file.audio.reader:
+            video_clip_file.audio.reader.close_proc()
     except:
         messagebox.showerror(
             title="Error", message="Falló al convertir revise las configuraciónes")
@@ -109,7 +138,7 @@ def cut_video(video_clip_file, num_of_cuts, video_length):
 
 def set_text(entry, value):
     entry.delete(0, END)
-    entry.insert(0, int(round(float(value)*60, 0)))
+    entry.insert(0, (float(value) / 60, 0))
 
 
 def CalcWindow():
